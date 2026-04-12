@@ -3,9 +3,16 @@
 
 import OpenAI from 'openai';
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+    if (!_openai) {
+        _openai = new OpenAI({
+            apiKey: process.env.OPENAI_API_KEY,
+        });
+    }
+    return _openai;
+}
 
 interface AnalysisData {
     overall_score: number;
@@ -123,7 +130,7 @@ CRITICAL REQUIREMENTS:
 Return JSON: {"posts": [{"content": "post text here"}]}`;
 
         try {
-            const response = await openai.chat.completions.create({
+            const response = await getOpenAI().chat.completions.create({
                 model: 'gpt-4o-mini',
                 messages: [
                     {
@@ -181,7 +188,7 @@ Based on: ${analysis.generated_copy?.valueProps?.[0]?.copy || 'marketing content
 
 Return only the post text, nothing else.`;
 
-    const response = await openai.chat.completions.create({
+    const response = await getOpenAI().chat.completions.create({
         model: 'gpt-4o-mini',
         messages: [{ role: 'user', content: prompt }],
         temperature: 0.8,
