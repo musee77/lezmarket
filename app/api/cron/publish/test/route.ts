@@ -55,13 +55,16 @@ export async function GET(request: NextRequest) {
             campaigns: campaigns,
             totalPendingPosts: posts?.length || 0,
             dueNow: duePosts.length,
-            duePosts: duePosts.map(p => ({
-                id: p.id,
-                platform: p.platform,
-                scheduledFor: p.scheduled_for,
-                campaignName: p.campaigns?.name,
-                content: p.content?.substring(0, 50) + '...',
-            })),
+            duePosts: duePosts.map(p => {
+                const campaign = p.campaigns as unknown as { id: string; name: string; user_id: string; status: string } | null;
+                return {
+                    id: p.id,
+                    platform: p.platform,
+                    scheduledFor: p.scheduled_for,
+                    campaignName: campaign?.name,
+                    content: p.content?.substring(0, 50) + '...',
+                };
+            }),
             futurePostsCount: futurePosts.length,
             nextScheduled: futurePosts[0]?.scheduled_for || null,
         });
