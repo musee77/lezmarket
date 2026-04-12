@@ -19,6 +19,7 @@
 
 # production
 /build
+lezmarket.pem
 
 # misc
 .DS_Store

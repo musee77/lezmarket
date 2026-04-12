@@ -1,0 +1,61 @@
+# Docker Compose for PRODUCTION (non-Swarm servers)
+# For Docker Swarm, use: docker stack deploy -c docker-stack.yml letsmarket
+# For plain Docker, use: docker compose -f docker-compose.prod.yml up -d
+
+services:
+  app:
+    image: ${DOCKER_REGISTRY:-ghcr.io/}${IMAGE_NAME:-musee77/letsmarket}:${TAG:-latest}
+    container_name: letsmarket-app
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+    env_file:
+      - .env.production
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 512M
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+    networks:
+      - letsmarket-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  nginx:
+    image: nginx:alpine
+    container_name: letsmarket-nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - letsmarket-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "5m"
+        max-file: "2"
+
+networks:
+  letsmarket-network:
+    driver: bridge
