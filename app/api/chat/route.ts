@@ -1,6 +1,6 @@
 // app/api/chat/route.ts
 
-import { openai } from "@/lib/openai";
+import { getOpenAIClient } from "@/lib/openai";
 import { chatRateLimiter } from "@/lib/rate-limit";
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
@@ -104,7 +104,7 @@ Guidelines:
 ${analysisContext}
 ${principleContext}`;
 
-        const response = await openai.chat.completions.create({
+        const response = await getOpenAIClient().chat.completions.create({
             model: "gpt-4o",
             messages: [
                 { role: "system", content: systemPrompt },

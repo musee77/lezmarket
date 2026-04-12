@@ -2,9 +2,16 @@
 
 import OpenAI from 'openai';
 
-export const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
-});
+let _openai: OpenAI | null = null;
+
+export function getOpenAIClient(): OpenAI {
+  if (!_openai) {
+    _openai = new OpenAI({
+      apiKey: process.env.OPENAI_API_KEY,
+    });
+  }
+  return _openai;
+}
 
 export async function analyzeWebsiteContent(content: string) {
   const systemPrompt = `You are a world-class marketing psychologist and conversion copywriter.
@@ -51,7 +58,7 @@ Return ONLY valid JSON with this exact structure:
   "recommendations": [{ "title": string, "description": string, "principle": string, "impactScore": number, "difficulty": "easy" | "medium" | "hard", "implementation": string }]
 }`;
 
-  const response = await openai.chat.completions.create({
+  const response = await getOpenAIClient().chat.completions.create({
     model: 'gpt-4o',
     messages: [
       { role: 'system', content: systemPrompt },
