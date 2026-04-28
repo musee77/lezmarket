@@ -83,7 +83,7 @@ jobs:
           echo "**Tags:** \`${{ steps.meta.outputs.tags }}\`" >> $GITHUB_STEP_SUMMARY
 
   # ============================================
-  # Job 2: Deploy to AWS EC2 (Docker Swarm)
+  # Job 2: Deploy to AWS EC2 (Docker Compose)
   # ============================================
   deploy:
     name: 🚀 Deploy to lezmarket.io
@@ -102,7 +102,7 @@ jobs:
           username: ${{ secrets.EC2_USER }}
           key: ${{ secrets.EC2_SSH_KEY }}
           port: 22
-          source: "docker-stack.yml,nginx/nginx.conf"
+          source: "nginx/nginx.conf"
           target: ${{ secrets.APP_DIR }}
           overwrite: true
 
@@ -117,7 +117,7 @@ jobs:
           script: |
             set -e
 
-            echo "🚀 Deploying to lezmarket.io (AWS EC2 / Docker Swarm)..."
+            echo "🚀 Deploying to lezmarket.io (AWS EC2 / Docker Compose)..."
 
             # Login to Docker Hub
             echo "${{ secrets.DOCKERHUB_TOKEN }}" | docker login -u "${{ secrets.DOCKERHUB_USERNAME }}" --password-stdin
@@ -136,14 +136,54 @@ jobs:
             # Ensure nginx directory exists
             mkdir -p nginx
 
-            # Deploy with Docker Swarm (rolling update)
-            echo "📦 Deploying Docker Swarm stack..."
-            export DOCKER_REGISTRY="${{ secrets.DOCKERHUB_USERNAME }}/"
-            export TAG="latest"
-            docker stack deploy -c docker-stack.yml letsmarket --with-registry-auth
+            # Write production docker-compose.yml
+            cat > docker-compose.yml << 'COMPOSEEOF'
+            services:
+              app:
+                image: ${DOCKERHUB_IMAGE}:${TAG:-latest}
+                container_name: letsmarket-app
+                restart: unless-stopped
+                ports:
+                  - "3000:3000"
+                environment:
+                  - NODE_ENV=production
+                env_file:
+                  - .env.production
+                healthcheck:
+                  test: ["CMD", "wget", "-q", "--spider", "http://localhost:3000/api/health"]
+                  interval: 30s
+                  timeout: 10s
+                  retries: 3
+                  start_period: 40s
+                deploy:
+                  resources:
+                    limits:
+                      cpus: "1"
+                      memory: 512M
+                    reservations:
+                      cpus: "0.25"
+                      memory: 256M
+                networks:
+                  - letsmarket-network
+                logging:
+                  driver: "json-file"
+                  options:
+                    max-size: "10m"
+                    max-file: "3"
 
-            # Wait for services to converge
-            echo "⏳ Waiting for services to converge..."
+            networks:
+              letsmarket-network:
+                driver: bridge
+            COMPOSEEOF
+
+            # Deploy with Docker Compose
+            echo "📦 Deploying with Docker Compose..."
+            export DOCKERHUB_IMAGE="${{ env.DOCKERHUB_IMAGE }}"
+            export TAG="latest"
+            docker compose up -d --pull always --remove-orphans
+
+            # Wait for services to start
+            echo "⏳ Waiting for services to start..."
             RETRIES=12
             DELAY=10
             HEALTHY=false
@@ -163,12 +203,11 @@ jobs:
             if [ "$HEALTHY" = true ]; then
               echo "✅ lezmarket.io is live and healthy!"
             else
-              echo "⚠️ Health check inconclusive — checking service status..."
-              docker service ls
-              docker service ps letsmarket_app --no-trunc 2>/dev/null || true
+              echo "⚠️ Health check inconclusive — checking container status..."
+              docker compose ps
+              docker compose logs --tail 30 app
               echo ""
               echo "⚠️ Deployment completed but health check did not pass."
-              echo "   This may be normal if SSL/nginx is handling the request."
               echo "   Check: curl -k https://lezmarket.io/api/health"
             fi
 

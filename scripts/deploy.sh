@@ -1,6 +1,6 @@
 #!/bin/bash
 # ===========================================
-# LetsMarket - Docker Swarm Deployment Script
+# LetsMarket - Docker Compose Deployment Script
 # ===========================================
 # Usage: ./scripts/deploy.sh [tag]
 #   tag: Docker image tag to deploy (default: latest)
@@ -34,18 +34,13 @@ log "Deploying ${DOCKERHUB_USER}/${IMAGE_NAME}:${TAG} to lezmarket.io"
 cd "${APP_DIR}"
 
 # Preflight checks
-if ! docker info --format '{{.Swarm.LocalNodeState}}' | grep -q "active"; then
-  error "Docker Swarm is not active. Run: docker swarm init"
-  exit 1
-fi
-
 if [ ! -f ".env.production" ]; then
   error ".env.production not found in ${APP_DIR}"
   exit 1
 fi
 
-if [ ! -f "docker-stack.yml" ]; then
-  error "docker-stack.yml not found in ${APP_DIR}"
+if [ ! -f "docker-compose.yml" ]; then
+  error "docker-compose.yml not found in ${APP_DIR}"
   exit 1
 fi
 
@@ -54,12 +49,13 @@ log "Pulling image from Docker Hub..."
 docker pull "${DOCKERHUB_USER}/${IMAGE_NAME}:${TAG}"
 success "Image pulled"
 
-# Deploy with Docker Swarm
-log "Deploying Docker Swarm stack..."
-export DOCKER_REGISTRY="${DOCKERHUB_USER}/"
-export TAG="${TAG}"
-docker stack deploy -c docker-stack.yml letsmarket --with-registry-auth
-success "Swarm stack updated"
+# Deploy with Docker Compose
+log "Deploying with Docker Compose..."
+export DOCKER_REGISTRY=""
+export IMAGE_NAME="${DOCKERHUB_USER}/${IMAGE_NAME}"
+export TAG
+docker compose -f docker-compose.yml up -d --pull always --remove-orphans
+success "Containers updated"
 
 # Health check
 log "Running health checks..."
@@ -82,19 +78,19 @@ if [ "${HEALTHY}" = true ]; then
   docker image prune -f > /dev/null 2>&1
   echo ""
   log "====== Deployment Summary ======"
-  log "Image:  ${DOCKERHUB_USER}/${IMAGE_NAME}:${TAG}"
-  log "Mode:   Docker Swarm"
+  log "Image:  ${IMAGE_NAME}:${TAG}"
+  log "Mode:   Docker Compose"
   log "Domain: lezmarket.io"
   log "Time:   $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
   log "================================"
 else
   error "Health check failed after ${HEALTH_RETRIES} attempts!"
   warn "Service status:"
-  docker service ls
-  docker service ps letsmarket_app --no-trunc 2>/dev/null || true
+  docker compose -f docker-compose.yml ps
+  docker compose -f docker-compose.yml logs --tail 30 app
   echo ""
-  warn "Attempting Swarm rollback..."
-  docker service rollback letsmarket_app 2>/dev/null || true
-  error "Check logs: docker service logs letsmarket_app --tail 50"
+  warn "Restarting containers..."
+  docker compose -f docker-compose.yml restart app 2>/dev/null || true
+  error "Check logs: docker compose -f docker-compose.yml logs -f app"
   exit 1
 fi
